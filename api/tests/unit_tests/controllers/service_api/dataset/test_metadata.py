@@ -215,7 +215,7 @@ class TestDatasetMetadataServiceApiPatch:
     ):
         """Test successful metadata name update."""
         metadata_id = str(uuid.uuid4())
-        mock_dataset_svc.get_dataset.return_value = mock_dataset
+        mock_dataset_svc.get_dataset_for_tenant.return_value = mock_dataset
         mock_dataset_svc.check_dataset_permission.return_value = None
         mock_meta_svc.update_metadata_name.return_value = {"id": metadata_id, "type": "string", "name": "New Name"}
 
@@ -236,7 +236,12 @@ class TestDatasetMetadataServiceApiPatch:
 
         assert status == 200
         assert response == {"id": metadata_id, "type": "string", "name": "New Name"}
-        mock_meta_svc.update_metadata_name.assert_called_once()
+        mock_dataset_svc.get_dataset_for_tenant.assert_called_once_with(
+            str(mock_dataset.id), mock_tenant.id, session=session
+        )
+        mock_meta_svc.update_metadata_name.assert_called_once_with(
+            mock_dataset, metadata_id, "New Name", mock_current_user, session=session
+        )
 
     @patch("controllers.service_api.dataset.metadata.DatasetService")
     def test_update_metadata_dataset_not_found(
@@ -248,7 +253,7 @@ class TestDatasetMetadataServiceApiPatch:
     ):
         """Test 404 when dataset not found."""
         metadata_id = str(uuid.uuid4())
-        mock_dataset_svc.get_dataset.return_value = None
+        mock_dataset_svc.get_dataset_for_tenant.return_value = None
 
         with app.test_request_context(
             f"/datasets/{mock_dataset.id}/metadata/{metadata_id}",
@@ -291,7 +296,7 @@ class TestDatasetMetadataServiceApiDelete:
     ):
         """Test successful metadata deletion."""
         metadata_id = str(uuid.uuid4())
-        mock_dataset_svc.get_dataset.return_value = mock_dataset
+        mock_dataset_svc.get_dataset_for_tenant.return_value = mock_dataset
         mock_dataset_svc.check_dataset_permission.return_value = None
         mock_meta_svc.delete_metadata.return_value = None
 
@@ -310,7 +315,10 @@ class TestDatasetMetadataServiceApiDelete:
             )
 
         assert response == ("", 204)
-        mock_meta_svc.delete_metadata.assert_called_once()
+        mock_dataset_svc.get_dataset_for_tenant.assert_called_once_with(
+            str(mock_dataset.id), mock_tenant.id, session=session
+        )
+        mock_meta_svc.delete_metadata.assert_called_once_with(mock_dataset, metadata_id, session)
 
     @patch("controllers.service_api.dataset.metadata.DatasetService")
     def test_delete_metadata_dataset_not_found(
@@ -322,7 +330,7 @@ class TestDatasetMetadataServiceApiDelete:
     ):
         """Test 404 when dataset not found."""
         metadata_id = str(uuid.uuid4())
-        mock_dataset_svc.get_dataset.return_value = None
+        mock_dataset_svc.get_dataset_for_tenant.return_value = None
 
         with app.test_request_context(
             f"/datasets/{mock_dataset.id}/metadata/{metadata_id}",
