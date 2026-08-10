@@ -49,11 +49,14 @@ from models.account import AccountStatus, TenantAccountRole
 from services.account_errors import (
     AccountAlreadyInitializedError,
     AccountDeletionRateLimitError,
+    AccountEmailAlreadyInUseError,
+    AccountEmailFrozenError,
     AvatarFileNotFoundError,
     CurrentAccountPasswordIncorrectError,
     EmptyAccountProfileChangesError,
     InvalidAccountDeletionVerificationError,
     InvalidAccountPasswordError,
+    InvalidChangeEmailCodeError,
     MissingInvitationCodeError,
 )
 from services.entities.account_entities import AccountIntegrationStatus, AccountProfileChanges
@@ -650,6 +653,14 @@ class TestChangeEmailApis:
 
         payload = {"email": "a@test.com", "code": "x", "token": "t"}
         user = make_account("acc-1")
+        request_context = RequestContext(
+            request_id="request-1",
+            trace_id=None,
+            account_id=user.id,
+            active_workspace_id="workspace-1",
+        )
+        change_email = MagicMock()
+        change_email.verify_code.side_effect = InvalidChangeEmailCodeError
 
         with (
             app.test_request_context("/", json=payload),
@@ -660,20 +671,12 @@ class TestChangeEmailApis:
                 return_value=payload,
             ),
             patch(
-                "controllers.console.workspace.account.AccountService.is_change_email_error_rate_limit",
-                return_value=False,
-            ),
-            patch(
-                "controllers.console.workspace.account.AccountService.get_change_email_data",
-                return_value=MagicMock(
-                    email="a@test.com",
-                    code="y",
-                    is_bound_to_account=MagicMock(return_value=True),
-                ),
+                "controllers.console.workspace.account.application_services",
+                return_value=SimpleNamespace(accounts=SimpleNamespace(change_email=change_email)),
             ),
         ):
             with pytest.raises(EmailCodeError):
-                method(api, user)
+                method(api, request_context)
 
     def test_reset_email_already_used(self, app: Flask):
         api = ChangeEmailResetApi()
@@ -681,6 +684,14 @@ class TestChangeEmailApis:
 
         payload = {"new_email": "x@test.com", "token": "t"}
         user = make_account()
+        request_context = RequestContext(
+            request_id="request-1",
+            trace_id=None,
+            account_id=user.id,
+            active_workspace_id="workspace-1",
+        )
+        change_email = MagicMock()
+        change_email.reset.side_effect = AccountEmailAlreadyInUseError
 
         with (
             app.test_request_context("/", json=payload),
@@ -690,11 +701,13 @@ class TestChangeEmailApis:
                 new_callable=PropertyMock,
                 return_value=payload,
             ),
-            patch("controllers.console.workspace.account.AccountService.is_account_in_freeze", return_value=False),
-            patch("controllers.console.workspace.account.AccountService.check_email_unique", return_value=False),
+            patch(
+                "controllers.console.workspace.account.application_services",
+                return_value=SimpleNamespace(accounts=SimpleNamespace(change_email=change_email)),
+            ),
         ):
             with pytest.raises(EmailAlreadyInUseError):
-                method(api, user)
+                method(api, request_context)
 
 
 class TestCheckEmailUniqueApi:
@@ -703,6 +716,7 @@ class TestCheckEmailUniqueApi:
         method = inspect.unwrap(api.post)
 
         payload = {"email": "ok@test.com"}
+        change_email = MagicMock()
 
         with (
             app.test_request_context("/", json=payload),
@@ -712,8 +726,10 @@ class TestCheckEmailUniqueApi:
                 new_callable=PropertyMock,
                 return_value=payload,
             ),
-            patch("controllers.console.workspace.account.AccountService.is_account_in_freeze", return_value=False),
-            patch("controllers.console.workspace.account.AccountService.check_email_unique", return_value=True),
+            patch(
+                "controllers.console.workspace.account.application_services",
+                return_value=SimpleNamespace(accounts=SimpleNamespace(change_email=change_email)),
+            ),
         ):
             result = method(api)
 
@@ -724,6 +740,8 @@ class TestCheckEmailUniqueApi:
         method = inspect.unwrap(api.post)
 
         payload = {"email": "x@test.com"}
+        change_email = MagicMock()
+        change_email.ensure_available.side_effect = AccountEmailFrozenError
 
         with (
             app.test_request_context("/", json=payload),
@@ -733,7 +751,10 @@ class TestCheckEmailUniqueApi:
                 new_callable=PropertyMock,
                 return_value=payload,
             ),
-            patch("controllers.console.workspace.account.AccountService.is_account_in_freeze", return_value=True),
+            patch(
+                "controllers.console.workspace.account.application_services",
+                return_value=SimpleNamespace(accounts=SimpleNamespace(change_email=change_email)),
+            ),
         ):
             with pytest.raises(AccountInFreezeError):
                 method(api)
