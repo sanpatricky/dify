@@ -11,3 +11,11 @@ class AccountNotFoundError(AccountApplicationError):
 
 class EmptyAccountProfileChangesError(AccountApplicationError):
     """A profile update did not contain a supported field."""
+
+
+class CurrentAccountPasswordIncorrectError(AccountApplicationError):
+    """The supplied current password does not match the account credential."""
+
+
+class AvatarFileNotFoundError(AccountApplicationError):
+    """The requested avatar file does not exist or is not owned by the account."""

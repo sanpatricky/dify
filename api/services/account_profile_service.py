@@ -2,12 +2,10 @@
 
 from machinery.context import RequestContext
 from services.account_errors import AccountNotFoundError, EmptyAccountProfileChangesError
-from services.account_ports import AccountUnitOfWorkFactory
+from services.account_ports import AccountRepositoryUnitOfWork, UnitOfWorkFactory
 from services.entities.account_entities import AccountProfileChanges, AccountSnapshot
-
-
 class AccountProfileService:
-    def __init__(self, *, unit_of_work: AccountUnitOfWorkFactory) -> None:
+    def __init__(self, *, unit_of_work: UnitOfWorkFactory[AccountRepositoryUnitOfWork]) -> None:
         self._unit_of_work = unit_of_work
 
     def get(self, context: RequestContext) -> AccountSnapshot:
