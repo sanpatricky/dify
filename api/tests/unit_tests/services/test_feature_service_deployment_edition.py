@@ -34,3 +34,5 @@ def test_get_system_features_resolves_deployment_edition(
 
     assert result.deployment_edition is expected
     assert result.model_dump(mode="json")["deployment_edition"] == expected.value
+    assert FeatureService.is_webapp_auth_enabled() is enterprise_enabled
+    assert result.webapp_auth.enabled is enterprise_enabled

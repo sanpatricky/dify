@@ -15,7 +15,6 @@ from libs.passport import PassportService
 from libs.token import extract_webapp_passport
 from models.model import App, EndUser
 from services.app_parameter_query_service import AppParameterNotPublishedError, AppParameterUnavailableError
-from services.app_service import AppService
 from services.enterprise.enterprise_service import EnterpriseService
 from services.feature_service import FeatureService
 from services.webapp_auth_service import WebAppAuthService
@@ -122,21 +121,11 @@ class AppAccessMode(Resource):
     def get(self):
         raw_args = request.args.to_dict()
         args = AppAccessModeQuery.model_validate(raw_args)
-
-        features = FeatureService.get_system_features()
-        if not features.webapp_auth.enabled:
-            return {"accessMode": "public"}
-
-        app_id = args.app_id
-        if args.app_code:
-            app_id = AppService.get_app_id_by_code(args.app_code, session=db.session())
-
-        if not app_id:
-            raise ValueError("appId or appCode must be provided")
-
-        res = EnterpriseService.WebAppAuth.get_app_access_mode_by_id(app_id)
-
-        return {"accessMode": res.access_mode}
+        access_mode = application_services().webapp_access_mode_queries.get_access_mode(
+            app_id=args.app_id,
+            app_code=args.app_code,
+        )
+        return {"accessMode": access_mode.value}
 
 
 @web_ns.route("/webapp/permission")

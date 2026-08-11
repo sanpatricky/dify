@@ -11,7 +11,9 @@ from constants.dsl_version import CURRENT_APP_DSL_VERSION
 from core.db.session_factory import get_session_maker
 from core.schemas.schema_manager import SchemaManager
 from enums.deployment_edition import DeploymentEdition
+from enums.webapp_access_mode import WebAppAccessMode
 from extensions.ext_redis import RedisClientWrapper, redis_client
+from repositories.app_code_query_repository import AppCodeQueryRepository
 from repositories.app_info_query_repository import AppInfoQueryRepository
 from repositories.app_meta_query_repository import AppMetaQueryRepository
 from repositories.app_parameter_query_repository import AppParameterQueryRepository
@@ -22,6 +24,7 @@ from repositories.workspace_query_repository import WorkspaceQueryRepository
 from services.app_info_query_service import AppInfoQueryService
 from services.app_meta_query_service import AppMetaQueryService
 from services.app_parameter_query_service import AppParameterQueryService
+from services.enterprise.enterprise_service import EnterpriseService
 from services.explore_banner_query_service import ExploreBannerQueryService
 from services.feature_query_service import FeatureQueryService
 from services.feature_service import FeatureService
@@ -29,6 +32,7 @@ from services.feature_service_gateway import FeatureServiceGateway
 from services.schema_definition_service import SchemaDefinitionService
 from services.setup_adapters import RedisSetupLock, RegisterServiceAccountProvisioner
 from services.setup_service import SetupService
+from services.webapp_access_mode_query_service import WebAppAccessModeQueryService
 from services.workspace_member_query_service import WorkspaceMemberQueryService
 from services.workspace_member_role_resolver import DeploymentWorkspaceMemberRoleResolver
 from services.workspace_plan_gateway import DeploymentWorkspacePlanGateway
@@ -37,11 +41,17 @@ from services.workspace_query_service import WorkspaceQueryService
 _EXTENSION_KEY = "application_services"
 
 
+def _get_enterprise_webapp_access_mode(app_id: str) -> WebAppAccessMode:
+    settings = EnterpriseService.WebAppAuth.get_app_access_mode_by_id(app_id)
+    return WebAppAccessMode(settings.access_mode)
+
+
 @dataclass(frozen=True, slots=True)
 class ApplicationServices:
     app_info_queries: AppInfoQueryService
     app_meta_queries: AppMetaQueryService
     app_parameter_queries: AppParameterQueryService
+    webapp_access_mode_queries: WebAppAccessModeQueryService
     explore_banner_queries: ExploreBannerQueryService
     schema_definitions: SchemaDefinitionService
     setup: SetupService
@@ -69,6 +79,11 @@ def build_application_services(
         ),
         app_parameter_queries=AppParameterQueryService(
             parameters=AppParameterQueryRepository(session_factory=database_client),
+        ),
+        webapp_access_mode_queries=WebAppAccessModeQueryService(
+            app_codes=AppCodeQueryRepository(session_factory=database_client),
+            webapp_auth_enabled=FeatureService.is_webapp_auth_enabled(),
+            access_mode_for_app=_get_enterprise_webapp_access_mode,
         ),
         explore_banner_queries=ExploreBannerQueryService(
             banners=ExploreBannerQueryRepository(client=database_client),
