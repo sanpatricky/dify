@@ -41,6 +41,7 @@ from controllers.console.workspace.error import (
     AccountAlreadyInitedError,
     CurrentPasswordIncorrectError,
     InvalidAccountDeletionCodeError,
+    InvalidAccountPasswordRequestError,
     InvalidAccountProfileChangesError,
     InvalidInvitationCodeError,
     RepeatPasswordNotMatchError,
@@ -516,6 +517,8 @@ class AccountPasswordApi(Resource):
             )
         except account_errors.CurrentAccountPasswordIncorrectError as error:
             raise CurrentPasswordIncorrectError() from error
+        except account_errors.InvalidAccountPasswordError as error:
+            raise InvalidAccountPasswordRequestError(description=str(error)) from error
         except account_errors.AccountNotFoundError as error:
             raise AccountNotFound() from error
 
