@@ -3,9 +3,9 @@ from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 import pytest
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, sessionmaker
 
-from controllers.common.agent_app_parameters import get_published_agent_app_feature_dict_and_user_input_form
 from core.app.app_config.common.parameters_mapping import get_parameters_from_feature_dict
 from core.app.apps.agent_app.errors import AgentAppGeneratorError, AgentAppNotPublishedError
 from models.agent import (
@@ -17,7 +17,8 @@ from models.agent import (
     AgentSource,
     AgentStatus,
 )
-from models.model import AppAnnotationSetting
+from models.model import App, AppAnnotationSetting, AppMode
+from repositories.app_parameter_query_repository import AppParameterQueryRepository, _get_public_agent_config
 
 
 def _stable_uuid(value: str) -> str:
@@ -28,7 +29,19 @@ def _app_model(*, tenant_id: str, bound_agent_id: str | None, app_model_config: 
     return SimpleNamespace(
         id=_stable_uuid(f"app:{tenant_id}"),
         tenant_id=tenant_id,
-        bound_agent_id=bound_agent_id,
+        agent_app_binding_with_session=lambda *, session: (
+            session.scalar(
+                select(Agent)
+                .where(
+                    Agent.id == bound_agent_id,
+                    Agent.tenant_id == tenant_id,
+                    Agent.status == AgentStatus.ACTIVE,
+                )
+                .limit(1)
+            )
+            if bound_agent_id
+            else None
+        ),
         app_model_config_with_session=lambda *, session: app_model_config,
     )
 
@@ -40,6 +53,7 @@ def _persist_agent(
     agent_id: str,
     active_config_snapshot_id: str | None,
     active_config_is_published: bool,
+    app_id: str | None = None,
 ) -> Agent:
     agent = Agent(
         id=agent_id,
@@ -50,6 +64,7 @@ def _persist_agent(
         status=AgentStatus.ACTIVE,
         active_config_snapshot_id=active_config_snapshot_id,
         active_config_is_published=active_config_is_published,
+        app_id=app_id,
     )
     session.add(agent)
     session.commit()
@@ -107,6 +122,54 @@ def _persist_publish_revision(
         session.commit()
 
 
+def test_get_published_public_loads_agent_snapshot(
+    sqlite_session_factory: sessionmaker[Session],
+) -> None:
+    tenant_id = _stable_uuid("tenant:repository")
+    app_id = _stable_uuid("app:repository")
+    agent_id = _stable_uuid("agent:repository")
+    snapshot_id = _stable_uuid("snapshot:repository")
+    with sqlite_session_factory() as session:
+        session.add(
+            App(
+                id=app_id,
+                tenant_id=tenant_id,
+                name="Agent App",
+                description="",
+                mode=AppMode.AGENT,
+                icon_type=None,
+                icon=None,
+                icon_background=None,
+                enable_site=True,
+                enable_api=True,
+                max_active_requests=None,
+            )
+        )
+        session.commit()
+        _persist_agent(
+            session,
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            active_config_snapshot_id=snapshot_id,
+            active_config_is_published=True,
+            app_id=app_id,
+        )
+        _persist_snapshot(
+            session,
+            snapshot_id=snapshot_id,
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            config_snapshot={"app_variables": [{"name": "topic", "type": "string", "required": True}]},
+        )
+
+    result = AppParameterQueryRepository(session_factory=sqlite_session_factory).get_published(
+        app_id, public_runtime=True
+    )
+
+    assert result is not None
+    assert result.user_input_form == [{"text-input": {"label": "topic", "variable": "topic", "required": True}}]
+
+
 @pytest.mark.parametrize(
     "sqlite_session",
     [(Agent, AgentConfigSnapshot, AgentConfigRevision, AppAnnotationSetting)],
@@ -157,7 +220,7 @@ def test_published_agent_app_parameters_use_soul_file_upload(sqlite_session: Ses
         },
     )
 
-    features_dict, user_input_form = get_published_agent_app_feature_dict_and_user_input_form(
+    features_dict, user_input_form = _get_public_agent_config(
         app_model,
         session=sqlite_session,
     )
@@ -181,7 +244,7 @@ def test_published_agent_app_parameters_requires_bound_agent(sqlite_session: Ses
     app_model = _app_model(tenant_id=tenant_id, bound_agent_id=None)
 
     with pytest.raises(AgentAppGeneratorError, match="no bound Agent"):
-        get_published_agent_app_feature_dict_and_user_input_form(app_model, session=sqlite_session)
+        _get_public_agent_config(app_model, session=sqlite_session)
 
 
 @pytest.mark.parametrize("sqlite_session", [(Agent, AgentConfigSnapshot, AgentConfigRevision)], indirect=True)
@@ -198,7 +261,7 @@ def test_published_agent_app_parameters_requires_existing_active_agent(sqlite_se
     )
 
     with pytest.raises(AgentAppGeneratorError, match="no bound Agent"):
-        get_published_agent_app_feature_dict_and_user_input_form(app_model, session=sqlite_session)
+        _get_public_agent_config(app_model, session=sqlite_session)
 
 
 @pytest.mark.parametrize(
@@ -224,7 +287,7 @@ def test_published_agent_app_parameters_requires_published_agent(
     )
 
     with pytest.raises(AgentAppNotPublishedError, match="not been published"):
-        get_published_agent_app_feature_dict_and_user_input_form(app_model, session=sqlite_session)
+        _get_public_agent_config(app_model, session=sqlite_session)
 
 
 @pytest.mark.parametrize("sqlite_session", [(Agent, AgentConfigSnapshot, AgentConfigRevision)], indirect=True)
@@ -248,7 +311,7 @@ def test_published_agent_app_parameters_allows_unpublished_draft_with_active_sna
         config_snapshot={},
     )
 
-    features_dict, user_input_form = get_published_agent_app_feature_dict_and_user_input_form(
+    features_dict, user_input_form = _get_public_agent_config(
         app_model,
         session=sqlite_session,
     )
@@ -280,7 +343,7 @@ def test_published_agent_app_parameters_rejects_seeded_unpublished_snapshot(sqli
     )
 
     with pytest.raises(AgentAppNotPublishedError, match="not been published"):
-        get_published_agent_app_feature_dict_and_user_input_form(app_model, session=sqlite_session)
+        _get_public_agent_config(app_model, session=sqlite_session)
 
 
 @pytest.mark.parametrize("sqlite_session", [(Agent, AgentConfigSnapshot, AgentConfigRevision)], indirect=True)
@@ -303,7 +366,7 @@ def test_published_agent_app_parameters_requires_published_snapshot(sqlite_sessi
     )
 
     with pytest.raises(AgentAppGeneratorError, match="published version not found"):
-        get_published_agent_app_feature_dict_and_user_input_form(app_model, session=sqlite_session)
+        _get_public_agent_config(app_model, session=sqlite_session)
 
 
 @pytest.mark.parametrize("sqlite_session", [(Agent, AgentConfigSnapshot, AgentConfigRevision)], indirect=True)
@@ -327,7 +390,7 @@ def test_published_agent_app_parameters_allows_missing_legacy_app_model_config(s
         config_snapshot={},
     )
 
-    features_dict, user_input_form = get_published_agent_app_feature_dict_and_user_input_form(
+    features_dict, user_input_form = _get_public_agent_config(
         app_model,
         session=sqlite_session,
     )

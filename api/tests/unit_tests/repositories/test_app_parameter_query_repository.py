@@ -132,3 +132,39 @@ def test_get_published_returns_none_for_app_without_published_model_config(
     repository = AppParameterQueryRepository(session_factory=sqlite_session_factory)
 
     assert repository.get_published(_APP_ID) is None
+
+
+def test_get_published_preserves_legacy_agent_model_config(
+    sqlite_session_factory: sessionmaker[Session],
+) -> None:
+    with sqlite_session_factory() as session:
+        app = _persist_app(session, mode=AppMode.AGENT)
+        app_model_config = AppModelConfig(app_id=app.id, opening_statement="Legacy Agent config")
+        session.add(app_model_config)
+        session.flush()
+        app.app_model_config_id = app_model_config.id
+        session.commit()
+
+    result = AppParameterQueryRepository(session_factory=sqlite_session_factory).get_published(_APP_ID)
+
+    assert result is not None
+    assert result.features_dict["opening_statement"] == "Legacy Agent config"
+
+
+def test_get_published_public_reuses_standard_projection(
+    sqlite_session_factory: sessionmaker[Session],
+) -> None:
+    with sqlite_session_factory() as session:
+        app = _persist_app(session)
+        app_model_config = AppModelConfig(app_id=app.id, opening_statement="Public config")
+        session.add(app_model_config)
+        session.flush()
+        app.app_model_config_id = app_model_config.id
+        session.commit()
+
+    result = AppParameterQueryRepository(session_factory=sqlite_session_factory).get_published(
+        _APP_ID, public_runtime=True
+    )
+
+    assert result is not None
+    assert result.features_dict["opening_statement"] == "Public config"
