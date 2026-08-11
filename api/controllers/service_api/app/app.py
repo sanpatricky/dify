@@ -12,10 +12,10 @@ from controllers.service_api.app.error import AgentNotPublishedError, AppUnavail
 from controllers.service_api.wraps import validate_app_token
 from core.app.app_config.common.parameters_mapping import get_parameters_from_feature_dict
 from core.app.apps.agent_app.errors import AgentAppGeneratorError, AgentAppNotPublishedError
+from extensions.ext_application_services import application_services
 from extensions.ext_database import db
 from fields.base import ResponseModel
 from models.model import App, AppMode, load_annotation_reply_config
-from services.app_service import AppService
 
 
 class AppInfoResponse(ResponseModel):
@@ -136,7 +136,7 @@ class AppMetaApi(Resource):
 
         Returns metadata about the application including configuration and settings.
         """
-        return AppService().get_app_meta(app_model, session=db.session())
+        return application_services().app_meta_queries.get_meta(app_model.id)
 
 
 @service_api_ns.route("/info")

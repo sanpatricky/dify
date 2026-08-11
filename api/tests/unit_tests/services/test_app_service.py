@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from graphon.model_runtime.entities.model_entities import ModelType
 from models import Account, Tenant
 from models.model import App, AppMode, AppModelConfig, IconType
-from models.workflow import Workflow
 from services.agent.errors import AgentAccessNotReadyError, AgentNameConflictError
 from services.app_service import AppListParams, AppService, CreateAppParams
 
@@ -367,26 +366,6 @@ def test_get_recent_apps_uses_one_tenant_scoped_projection_query(sqlite_session:
     assert len(select_statements) == 1
     assert "count(" not in select_statements[0].lower()
     assert "app_model_configs" not in select_statements[0].lower()
-
-
-class TestAppMeta:
-    def test_loads_workflow_with_caller_session(self):
-        session = MagicMock()
-        session.get.return_value = SimpleNamespace(graph_dict={"nodes": []})
-        app = cast(App, SimpleNamespace(mode=AppMode.WORKFLOW, workflow_id="workflow-1"))
-
-        assert AppService().get_app_meta(app, session=session) == {"tool_icons": {}}
-
-        session.get.assert_called_once_with(Workflow, "workflow-1")
-
-    def test_loads_app_model_config_with_caller_session(self):
-        session = MagicMock()
-        session.get.return_value = SimpleNamespace(agent_mode_dict={"tools": []})
-        app = cast(App, SimpleNamespace(mode=AppMode.CHAT, app_model_config_id="config-1"))
-
-        assert AppService().get_app_meta(app, session=session) == {"tool_icons": {}}
-
-        session.get.assert_called_once_with(AppModelConfig, "config-1")
 
 
 class TestGetApp:
