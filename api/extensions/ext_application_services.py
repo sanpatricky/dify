@@ -12,12 +12,14 @@ from core.db.session_factory import get_session_maker
 from core.schemas.schema_manager import SchemaManager
 from enums.deployment_edition import DeploymentEdition
 from extensions.ext_redis import RedisClientWrapper, redis_client
+from repositories.app_info_query_repository import AppInfoQueryRepository
 from repositories.app_meta_query_repository import AppMetaQueryRepository
 from repositories.app_parameter_query_repository import AppParameterQueryRepository
 from repositories.explore_banner_query_repository import ExploreBannerQueryRepository
 from repositories.installation_state_repository import InstallationStateRepository
 from repositories.workspace_member_query_repository import WorkspaceMemberQueryRepository
 from repositories.workspace_query_repository import WorkspaceQueryRepository
+from services.app_info_query_service import AppInfoQueryService
 from services.app_meta_query_service import AppMetaQueryService
 from services.app_parameter_query_service import AppParameterQueryService
 from services.explore_banner_query_service import ExploreBannerQueryService
@@ -37,6 +39,7 @@ _EXTENSION_KEY = "application_services"
 
 @dataclass(frozen=True, slots=True)
 class ApplicationServices:
+    app_info_queries: AppInfoQueryService
     app_meta_queries: AppMetaQueryService
     app_parameter_queries: AppParameterQueryService
     explore_banner_queries: ExploreBannerQueryService
@@ -55,6 +58,9 @@ def build_application_services(
 ) -> ApplicationServices:
     installation_state = InstallationStateRepository(client=database_client)
     return ApplicationServices(
+        app_info_queries=AppInfoQueryService(
+            apps=AppInfoQueryRepository(session_factory=database_client),
+        ),
         app_meta_queries=AppMetaQueryService(
             metadata=AppMetaQueryRepository(session_factory=database_client),
             builtin_icon_url_prefix=(

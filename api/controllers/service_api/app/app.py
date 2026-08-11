@@ -11,6 +11,7 @@ from controllers.service_api.wraps import validate_app_token
 from extensions.ext_application_services import application_services
 from fields.base import ResponseModel
 from models.model import App
+from services.app_info_query_service import AppInfoUnavailableError
 from services.app_parameter_query_service import AppParameterNotPublishedError, AppParameterUnavailableError
 
 
@@ -130,11 +131,8 @@ class AppInfoApi(Resource):
 
         Returns basic information about the application including name, description, tags, and mode.
         """
-        tags = [tag.name for tag in app_model.tags]
-        return {
-            "name": app_model.name,
-            "description": app_model.description,
-            "tags": tags,
-            "mode": app_model.mode,
-            "author_name": app_model.author_name,
-        }
+        try:
+            info = application_services().app_info_queries.get_info(app_model.id)
+        except AppInfoUnavailableError:
+            raise AppUnavailableError() from None
+        return AppInfoResponse.model_validate(info).model_dump(mode="json")
