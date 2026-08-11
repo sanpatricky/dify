@@ -12,10 +12,14 @@ from core.db.session_factory import get_session_maker
 from core.schemas.schema_manager import SchemaManager
 from enums.deployment_edition import DeploymentEdition
 from extensions.ext_redis import RedisClientWrapper, redis_client
+from repositories.app_meta_query_repository import AppMetaQueryRepository
+from repositories.app_parameter_query_repository import AppParameterQueryRepository
 from repositories.explore_banner_query_repository import ExploreBannerQueryRepository
 from repositories.installation_state_repository import InstallationStateRepository
 from repositories.workspace_member_query_repository import WorkspaceMemberQueryRepository
 from repositories.workspace_query_repository import WorkspaceQueryRepository
+from services.app_meta_query_service import AppMetaQueryService
+from services.app_parameter_query_service import AppParameterQueryService
 from services.explore_banner_query_service import ExploreBannerQueryService
 from services.feature_query_service import FeatureQueryService
 from services.feature_service import FeatureService
@@ -33,6 +37,8 @@ _EXTENSION_KEY = "application_services"
 
 @dataclass(frozen=True, slots=True)
 class ApplicationServices:
+    app_meta_queries: AppMetaQueryService
+    app_parameter_queries: AppParameterQueryService
     explore_banner_queries: ExploreBannerQueryService
     schema_definitions: SchemaDefinitionService
     setup: SetupService
@@ -49,6 +55,15 @@ def build_application_services(
 ) -> ApplicationServices:
     installation_state = InstallationStateRepository(client=database_client)
     return ApplicationServices(
+        app_meta_queries=AppMetaQueryService(
+            metadata=AppMetaQueryRepository(session_factory=database_client),
+            builtin_icon_url_prefix=(
+                dify_config.CONSOLE_API_URL + "/console/api/workspaces/current/tool-provider/builtin/"
+            ),
+        ),
+        app_parameter_queries=AppParameterQueryService(
+            parameters=AppParameterQueryRepository(session_factory=database_client),
+        ),
         explore_banner_queries=ExploreBannerQueryService(
             banners=ExploreBannerQueryRepository(client=database_client),
             is_enabled=FeatureService.is_explore_banner_enabled,
