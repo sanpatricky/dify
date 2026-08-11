@@ -12,15 +12,14 @@ import type { AgentComposerModel } from '@/features/agent-v2/agent-composer/form
 import type { Inputs } from '@/models/debug'
 import { Avatar } from '@langgenius/dify-ui/avatar'
 import { cn } from '@langgenius/dify-ui/cn'
-import { useQueryClient } from '@tanstack/react-query'
-import { useAtomValue } from 'jotai'
+import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { useCallback, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import { AgentRosterResponseContent } from '@/app/components/base/chat/chat/answer/agent-roster-response-content'
 import { useChat } from '@/app/components/base/chat/chat/hooks'
 import { getLastAnswer, isValidGeneratedAnswer } from '@/app/components/base/chat/utils'
 import { ModelFeatureEnum } from '@/app/components/header/account-setting/model-provider-page/declarations'
 import { useTextGenerationCurrentProviderAndModelAndModelList } from '@/app/components/header/account-setting/model-provider-page/hooks'
-import { userProfileAtom } from '@/context/account-state'
+import { userProfileQueryOptions } from '@/features/account-profile/client'
 import dynamic from '@/next/dynamic'
 import { consoleClient, consoleQuery } from '@/service/client'
 import { buildChatConfig, getAgentSoulInputs, getAgentSoulInputsForm } from './chat-config'
@@ -119,7 +118,10 @@ export function AgentPreviewChatConversation({
   onSendInterrupted?: () => void
 }) {
   const queryClient = useQueryClient()
-  const userProfile = useAtomValue(userProfileAtom)
+  const { data: userProfile } = useSuspenseQuery({
+    ...userProfileQueryOptions(),
+    select: (data) => data.profile,
+  })
   const sendInterruptedRef = useRef(false)
   const [isSendPending, setIsSendPending] = useState(false)
   const notifySendInterrupted = useCallback(() => {
